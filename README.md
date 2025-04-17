@@ -18,3 +18,15 @@ Build and code for optical night sky measurements
 9. Run example from https://github.com/adafruit/Adafruit_CircuitPython_TSL2591/blob/main/examples/tsl2591_simpletest.py
 10. Copy code.py from this project and test display and sensor
 11. Package into case!
+
+## Pictures for setup
+
+![Fritzing breadboard layout](images/layout.png)
+
+![QtPy_breadboard](images/QtPy_breadboard.jpg)
+
+![QtPy with antenna](images/QtPy_with_antenna.jpg)
+
+![QtPy with antenna and TSL2591](images/QtPy_with_antenna_and_TSL2591.jpg)
+
+![QtPy fully connected](images/QtPy_full_connected.jpg)
