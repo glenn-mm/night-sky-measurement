@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2025 Glenn Henderson for Monterey Makers
+# SPDX-FileCopyrightText: 2025 Glenn Henderson for Monterey Makers (adapted from https://github.com/gshau/SQM_TSL2591)
 # SPDX-FileCopyrightText: 2024 Tim Cocks for Adafruit Industries
 # SPDX-FileCopyrightText: 2024 Jose D. Montoya
 #
@@ -21,18 +21,18 @@ import adafruit_tsl2591
 _calibrationOffset = 0
 
 # store gain conversion
-gains = {0:adafruit_tsl2591.GAIN_LOW,
-         1:adafruit_tsl2591.GAIN_MED,
-         2:adafruit_tsl2591.GAIN_HIGH,
-         3:adafruit_tsl2591.GAIN_MAX}
+gains = {0:(adafruit_tsl2591.GAIN_LOW,  1.0),
+         1:(adafruit_tsl2591.GAIN_MED,  25.0),
+         2:(adafruit_tsl2591.GAIN_HIGH, 425.0),
+         3:(adafruit_tsl2591.GAIN_MAX,  9876.0)}
 current_gain = 0
 
 # store integration conversions (skipping 100ms)
-integrations = {0:adafruit_tsl2591.INTEGRATIONTIME_200MS,
-                1:adafruit_tsl2591.INTEGRATIONTIME_300MS,
-                2:adafruit_tsl2591.INTEGRATIONTIME_400MS,
-                3:adafruit_tsl2591.INTEGRATIONTIME_500MS,
-                4:adafruit_tsl2591.INTEGRATIONTIME_600MS}
+integrations = {0:(adafruit_tsl2591.INTEGRATIONTIME_200MS, 200.0),
+                1:(adafruit_tsl2591.INTEGRATIONTIME_300MS, 300.0),
+                2:(adafruit_tsl2591.INTEGRATIONTIME_400MS, 400.0),
+                3:(adafruit_tsl2591.INTEGRATIONTIME_500MS, 500.0),
+                4:(adafruit_tsl2591.INTEGRATIONTIME_600MS, 600.0)}
 current_integration = 0
 
 #### Start of Display Configuration ####
@@ -50,8 +50,8 @@ display = adafruit_displayio_ssd1306.SSD1306(display_bus, width=128, height=32)
 i2c_s = board.STEMMA_I2C() # uses STEMMA connector
 sensor = adafruit_tsl2591.TSL2591(i2c_s)
 # start at low gain with 2nd shortest integration interval
-sensor.gain = gains[current_gain]
-sensor.integration_time = integrations[current_integration]
+sensor.gain = gains[current_gain][0]
+sensor.integration_time = integrations[current_integration][0]
 #### End of Sensor Configuration ####
 
 #### Start of text labels for output ####
@@ -78,22 +78,39 @@ display.root_group = main_group
 # begin main loop
 while True:
     # update the text of the label(s) to show the sensor readings
-    # Infrared levels range from 0-65535 (16-bit)
-    light_output_label.text = f"Total light:{sensor.lux:.1f}lux"
-    infra_output_label.text = f"Infrared light:{sensor.infrared}"
-    # calculate magnitudes per square arcsecond
-    mpsas = 12.6 - 1.086 * math.log(sensor.visible) + _calibrationOffset;
-    mpsas_output_label.text = f"MPSAS:{mpsas:.1f}"
-    # adjust the gain if visible light is too low
-    if sensor.visible < 128:
-        if current_gain >= 3: #already at max gain, increase integration
-            current_integration = current_integration + 1
-            if current_integration >= 4:
-                current_integration = 4
-            sensor.integration_time = integrations[current_integration]
-        else:
-            current_gain = (current_gain + 1)
-            sensor.gain = gains[current_gain]
-    # wait for a bit
-    time.sleep(0.5)
-
+    # Both channel levels range from 0-65535 (16-bit)
+    ch0, ch1 = sensor.raw_luminosity
+    light_output_label.text = f"Channel 0 (VS): {ch0}"
+    infra_output_label.text = f"Channel 1 (IR): {ch1}"
+    # calculate  magnitudes per square arcsecond
+    visCumulative = ch0-ch1
+    # adjust the gain depending on the sensor and re-measure
+    if visCumulative < 128:
+        current_gain += 1
+        if current_gain == 4: #already at max gain
+            current_gain -= 1
+        sensor.gain = gains[current_gain][0]
+        ch0, ch1 = sensor.raw_luminosity
+        visCumulative = ch0-ch1
+    if ch0 == 0xffff or ch1 == 0xffff:
+        current_gain-=1
+        if current_gain < 0: # already at min gain
+            current_gain = 0
+        sensor.gain = gains[current_gain][0]
+        ch0, ch1 = sensor.raw_luminosity
+        visCumulative = ch0-ch1
+        print("down gain")
+    # sample the sensor multiple times at low intensity
+    ii = 1
+    while visCumulative < 128:
+        time.sleep(.005)
+        ch0, ch1 = sensor.raw_luminosity
+        visCumulative += (ch0-ch1)
+        ii+=1
+        if ii > 32: # only take in 32 measurements
+            break
+    # update mpsas when we have valid readings
+    if visCumulative != 0:
+        vis = visCumulative/(gains[current_gain][1] * integrations[current_integration][1] / 200.0 * ii)
+        mpsas = 12.6 - 1.086 * math.log(vis) + _calibrationOffset;
+        mpsas_output_label.text = f"MPSAS:{mpsas:.1f}"
