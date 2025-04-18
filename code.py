@@ -118,4 +118,5 @@ while True:
         vis = visCumulative/(gains[current_gain][1] * integrations[current_integration][1] / 200.0 * ii)
         mpsas = 12.6 - 1.086 * math.log(vis) + _calibrationOffset;
         mpsas_s = f"MPSAS:{mpsas:.1f}"
+        print(mpsas_s)
         mpsas_output_label.text = mpsas_s
