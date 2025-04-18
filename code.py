@@ -80,8 +80,12 @@ while True:
     # update the text of the label(s) to show the sensor readings
     # Both channel levels range from 0-65535 (16-bit)
     ch0, ch1 = sensor.raw_luminosity
-    light_output_label.text = f"Channel 0 (VS): {ch0}"
-    infra_output_label.text = f"Channel 1 (IR): {ch1}"
+    ch0_s = f"Channel 0 (VS): {ch0}"
+    print(ch0_s)
+    ch1_s = f"Channel 1 (IR): {ch1}"
+    print(ch1_s)
+    light_output_label.text = ch0_s
+    infra_output_label.text = ch1_s
     # calculate  magnitudes per square arcsecond
     visCumulative = ch0-ch1
     # adjust the gain depending on the sensor and re-measure
@@ -113,4 +117,5 @@ while True:
     if visCumulative != 0:
         vis = visCumulative/(gains[current_gain][1] * integrations[current_integration][1] / 200.0 * ii)
         mpsas = 12.6 - 1.086 * math.log(vis) + _calibrationOffset;
-        mpsas_output_label.text = f"MPSAS:{mpsas:.1f}"
+        mpsas_s = f"MPSAS:{mpsas:.1f}"
+        mpsas_output_label.text = mpsas_s
