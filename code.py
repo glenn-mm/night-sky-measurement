@@ -75,48 +75,86 @@ main_group.append(mpsas_output_label)
 display.root_group = main_group
 #### End of text labels for output ####
 
+
+# Adjust the gain up or down by 1 unit
+def bump_gain(up):
+    global current_gain
+    limit = False
+    if up:
+        current_gain += 1
+        if current_gain == 4: #already at max gain
+            limit = True
+            current_gain -= 1
+    else:
+        current_gain-=1
+        if current_gain < 0: # already at min gain
+            limit = True
+            current_gain = 0
+    sensor.gain = gains[current_gain][0]
+    return limit
+
+# Adjust the integration duration up or down by 1 unit
+def bump_integration(up):
+    global current_integration
+    limit = False
+    if up:
+        current_integration += 1
+        if current_integration == 5:
+            limit = True
+            current_integration -= 1
+    else:
+        current_integration -= 1
+        if current_integration < 0:
+            limit = True
+            current_integration = 0
+    sensor.integration_time = integrations[current_integration][0]
+    return limit
+
 # begin main loop
 while True:
     # update the text of the label(s) to show the sensor readings
     # Both channel levels range from 0-65535 (16-bit)
     ch0, ch1 = sensor.raw_luminosity
     ch0_s = f"Channel 0 (VS): {ch0}"
-    print(ch0_s)
+    #print(ch0_s)
     ch1_s = f"Channel 1 (IR): {ch1}"
-    print(ch1_s)
+    #print(ch1_s)
     light_output_label.text = ch0_s
     infra_output_label.text = ch1_s
     # calculate  magnitudes per square arcsecond
     visCumulative = ch0-ch1
     # adjust the gain depending on the sensor and re-measure
-    if visCumulative < 128:
-        current_gain += 1
-        if current_gain == 4: #already at max gain
-            current_gain -= 1
-        sensor.gain = gains[current_gain][0]
-        ch0, ch1 = sensor.raw_luminosity
-        visCumulative = ch0-ch1
-    if ch0 == 0xffff or ch1 == 0xffff:
-        current_gain-=1
-        if current_gain < 0: # already at min gain
-            current_gain = 0
-        sensor.gain = gains[current_gain][0]
-        ch0, ch1 = sensor.raw_luminosity
-        visCumulative = ch0-ch1
-        print("down gain")
+    goodReading = True
+    if visCumulative < 128: #gain too low
+        goodReading = False
+        if bump_gain(True):
+            #print("max gain")
+            bump_integration(True)
+        _ = sensor.raw_luminosity
+        #print("gain up")
+    if ch0 == 0xffff or ch1 == 0xffff: #gain too high
+        goodReading = False
+        if bump_gain(False):
+            #print("min gain")
+            bump_integration(False)
+        _ = sensor.raw_luminosity
+        #print("gain down")
     # sample the sensor multiple times at low intensity
-    ii = 1
-    while visCumulative < 128:
-        time.sleep(.005)
-        ch0, ch1 = sensor.raw_luminosity
-        visCumulative += (ch0-ch1)
-        ii+=1
-        if ii > 32: # only take in 32 measurements
-            break
-    # update mpsas when we have valid readings
-    if visCumulative != 0:
-        vis = visCumulative/(gains[current_gain][1] * integrations[current_integration][1] / 200.0 * ii)
-        mpsas = 12.6 - 1.086 * math.log(vis) + _calibrationOffset;
-        mpsas_s = f"MPSAS:{mpsas:.1f}"
-        print(mpsas_s)
-        mpsas_output_label.text = mpsas_s
+    if goodReading:
+        ii = 1
+        while visCumulative < 128:
+            time.sleep(.005)
+            ch0, ch1 = sensor.raw_luminosity
+            visCumulative += (ch0-ch1)
+            ii+=1
+            if ii > 32: # only take in 32 measurements
+                break
+        # update mpsas when we have valid readings
+        if visCumulative != 0:
+            vis = visCumulative/(gains[current_gain][1] * integrations[current_integration][1] / 200.0 * ii)
+            mpsas = 12.6 - 1.086 * math.log(vis) + _calibrationOffset;
+            mpsas_s = f"MPSAS:{mpsas:.1f}"
+            #print(mpsas_s)
+            mpsas_output_label.text = mpsas_s
+    else:
+        mpsas_output_label.text = "MPSAS: Calibrating"
