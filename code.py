@@ -5,17 +5,15 @@
 # SPDX-License-Identifier: MIT
 
 # imports for basic functions
+import sys
 import time
 import board
 import math
-# imports for dispaly
-from adafruit_display_text.bitmap_label import Label
-from terminalio import FONT
-from i2cdisplaybus import I2CDisplayBus
-import displayio
-import adafruit_displayio_ssd1306
+import microcontroller
 # import for lux device
 import adafruit_tsl2591
+# import display functions
+import display
 
 # store a global calibration offset for tsl2591
 _calibrationOffset = 0
@@ -35,15 +33,7 @@ integrations = {0:(adafruit_tsl2591.INTEGRATIONTIME_200MS, 200.0),
                 4:(adafruit_tsl2591.INTEGRATIONTIME_600MS, 600.0)}
 current_integration = 0
 
-#### Start of Display Configuration ####
-# create a main_group to hold anything we want to show on the display.
-main_group = displayio.Group()
-displayio.release_displays()
-# Initialize I2C for display
-i2c_d = board.I2C()  # uses board.SCL and board.SDA
-display_bus = I2CDisplayBus(i2c_d, device_address=0x3C)
-display = adafruit_displayio_ssd1306.SSD1306(display_bus, width=128, height=32)
-#### End of Display Configuration ####
+calibrated = False
 
 #### Start of Sensor Configuration ####
 # Initialize I2C for sensor
@@ -53,28 +43,6 @@ sensor = adafruit_tsl2591.TSL2591(i2c_s)
 sensor.gain = gains[current_gain][0]
 sensor.integration_time = integrations[current_integration][0]
 #### End of Sensor Configuration ####
-
-#### Start of text labels for output ####
-# Create Label(s) to show the readings. If you have a very small
-# display you may need to change to scale=1.
-light_output_label = Label(FONT, text="")
-infra_output_label = Label(FONT, text="")
-mpsas_output_label = Label(FONT, text="")
-# place the label(s) in the middle of the screen with anchored positioning
-light_output_label.anchor_point = (0, 0)
-light_output_label.anchored_position = (4, 0)
-infra_output_label.anchor_point = (0, 0)
-infra_output_label.anchored_position = (4, 11)
-mpsas_output_label.anchor_point = (0, 0)
-mpsas_output_label.anchored_position = (4, 22)
-# add the label(s) to the main_group
-main_group.append(light_output_label)
-main_group.append(infra_output_label)
-main_group.append(mpsas_output_label)
-# set the main_group as the root_group of the built-in DISPLAY
-display.root_group = main_group
-#### End of text labels for output ####
-
 
 # Adjust the gain up or down by 1 unit
 def bump_gain(up):
@@ -119,9 +87,9 @@ while True:
     #print(ch0_s)
     ch1_s = f"Channel 1 (IR): {ch1}"
     #print(ch1_s)
-    light_output_label.text = ch0_s
-    infra_output_label.text = ch1_s
-    # calculate  magnitudes per square arcsecond
+    display.set_light(ch0_s)
+    display.set_ir(ch1_s)
+    # calculate magnitudes per square arcsecond
     visCumulative = ch0-ch1
     # adjust the gain depending on the sensor and re-measure
     goodReading = True
@@ -129,14 +97,18 @@ while True:
         goodReading = False
         if bump_gain(True):
             #print("max gain")
-            bump_integration(True)
+            if bump_integration(True):
+                # max gain/integration
+                goodReading = True
         _ = sensor.raw_luminosity
         #print("gain up")
     if ch0 == 0xffff or ch1 == 0xffff: #gain too high
         goodReading = False
         if bump_gain(False):
             #print("min gain")
-            bump_integration(False)
+            if bump_integration(False):
+                # min gain/integration
+                goodReading = True
         _ = sensor.raw_luminosity
         #print("gain down")
     # sample the sensor multiple times at low intensity
@@ -155,6 +127,6 @@ while True:
             mpsas = 12.6 - 1.086 * math.log(vis) + _calibrationOffset;
             mpsas_s = f"MPSAS:{mpsas:.1f}"
             #print(mpsas_s)
-            mpsas_output_label.text = mpsas_s
+            display.set_mpsas(mpsas_s)
     else:
-        mpsas_output_label.text = "MPSAS: Calibrating"
+        display.set_mpsas("MPSAS: Calibrating")
