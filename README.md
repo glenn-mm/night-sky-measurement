@@ -83,7 +83,7 @@ Calibration will require the use of an SQM-L device from https://www.unihedron.c
 * Thread the internal posts with the m2 screws (requires a little bit of force)
 * Move QtPy onto proto board and solder
 
-![QtPy Layout](images/qtpy_layout.jpg)
+![QtPy Layout](images/qtpy_layout1.jpg)
 
 * Solder display wires onto proto board
 
