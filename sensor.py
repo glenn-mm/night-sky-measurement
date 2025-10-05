@@ -5,7 +5,6 @@ import time
 import json
 import os
 
-
 # Given a gain and integration setting
 # obtain current visible light and adjust gain/integration based on
 # reading
@@ -37,7 +36,7 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         Additionally find the calibration file stored on the main
         drive read it in to setup the MPSAS interpolation
         """
-        super.__init__(i2c_device)
+        super(myTSL2591, self).__init__(i2c_device)
         self._calFile = 'tsl2591_calibration.json'
         self._calData = None
         self.calibrated = False
@@ -60,15 +59,15 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         # store integration conversions (skipping 100ms)
         self.current_integration = 0
         # start at low gain with 2nd shortest integration interval
-        super.gain = self.gains[self.current_gain][0]
-        super.integration_time = self.integrations[self.current_integration][0]
+        self.gain = self.gains[self.current_gain][0]
+        self.integration_time = self.integrations[self.current_integration][0]
 
     def _checkCalibration(self):
         """
         Try to find the calibration file and read it into class
         storage for interpolating values
         """
-        if os.path.exists(self._calFile):
+        if self._calFile in os.listdir():
             try:
                 with open(self._calFile) as jf:
                     self._calData = json.load(jf)
@@ -85,17 +84,32 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         in the self._calData matrix
         """
         # iterate gain and integration and get reading
-        for gainIdx in self.gains:
-            super.gain = self.gains[gainIdx][0]
-            for integrationIdx in self.integrations:
-                super.integration_time = self.integrations[integrationIdx][0]
+        for gainIdx in self.gains.keys():
+            self.gain = self.gains[gainIdx][0]
+            for integrationIdx in self.integrations.keys():
+                self.integration_time = self.integrations[integrationIdx][0]
                 # take a reading to flush the sensor
-                _ = super.raw_luminosity
-                ch0, ch1 = super.raw_luminosity
-                if self.validReading(ch0,ch1):
-                    # store visble and sqm reading as a tuple
-                    self._calData[gainIdx][integrationIdx].append((ch0-ch1,sqm_reading))
-    
+                _ = self.raw_luminosity
+                time.sleep(0.01)
+                visCumulative = 0
+                count = 0
+                for ii in range(32):
+                    ch0, ch1 = self.raw_luminosity
+                    if ch0 != 0xffff and ch1 != 0xffff: #saturation
+                        visCumulative += ch0-ch1
+                        count += 1
+                vis = 0
+                if visCumulative > 0:
+                    vis = visCumulative/32
+                # store visble and sqm reading as a tuple
+                if vis > 128:
+                    self._calData[gainIdx][integrationIdx].append((vis,sqm_reading))
+   
+    def printCalibration(self):
+        for gain in self._calData.keys():
+            for integ in self._calData[gain].keys():
+                print(json.dumps(self._calData[gain][integ]))
+
     def runCalibration(self):
         """
         Routine to walk a use through calibration via the serial
@@ -105,7 +119,11 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         3) Take readings from TSL2591 and store
         4) Adjust light level higher then goto step 2
         """
-        self._calData = [[]]*len(self.gains)
+        self._calData = {}
+        for gi in self.gains.keys():
+            self._calData[gi] = {}
+            for ii in self.integrations.keys():
+                self._calData[gi][ii] = []
         # 1: set light level
         print("Set light to lowest level (off in a black chamber is best)")
         ans = 'n'
@@ -114,18 +132,22 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         # 2: get sqm-l reading
         sqm_reading = float(input("Input SQM-L reading: "))
         self._calibrationPass(sqm_reading)
+        self.printCalibration()
         # 4: restart at #1 with new light level
         print("Set next light level and type 'y'to continue OR type 'q' to complete calibration")
         ans = input("(y/q): ")
         while ans.lower() == 'y':
             sqm_reading = float(input("Input SQM-L reading: "))
             self._calibrationPass(sqm_reading)
+            self.printCalibration()
+            print("Set next light level and type 'y' to continue OR type 'q' to complete calibration")
+            ans = input("(y/q): ")
         # just in case, sort the readings by visible light
         for gainIdx in self.gains:
             for integrationIdx in self.integrations:
                 self._calData[gainIdx][integrationIdx]=sorted(self._calData[gainIdx][integrationIdx])
         try:
-            with open(self._calFile) as jf:
+            with open(self._calFile,'w') as jf:
                 json.dump(self._calData,jf)
         except RuntimeError as err:
             print("Unable to save calibration data")
@@ -138,15 +160,21 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         for the list of values to search for the closest value in visible light
         interpolate between closest point and neighbor and return mpsas reading
         """
+        if self.current_gain not in self._calData.keys():
+            return -1
+        if self.current_intergration not in self._calData[self.current_gain].keys():
+            return -1
         readings = self._calData[self.current_gain][self.current_integration]
+        # remove invalid readings
+        #readings = [r for r in readings if r[0] != None]
         # readings is a list of tuples (visible,mpsas)
         if vis < readings[0][0]: # too low
             return -1
         if vis > readings[-1][0]: # too high
             return -1
         return np.interp(np.array([vis]),
-                         [v[0] for v in readings], #visible
-                         [m[1] for m in readings])[0] #mpsas
+                         [v[0] for v in readings if v[0]], #visible
+                         [m[1] for m in readings if m[0]])[0] #mpsas
 
     def bump_gain(self,up):
         """
@@ -164,7 +192,7 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
             if self.current_gain < self.min_gain: # already at min gain
                 limit = True
                 self.current_gain = self.min_gain
-        super.gain = self.gains[self.current_gain][0]
+        self.gain = self.gains[self.current_gain][0]
         return limit
 
     def bump_integration(self,up):
@@ -183,20 +211,8 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
             if self.current_integration < self.min_integration:
                 limit = True
                 self.current_integration = self.min_integration
-        super.integration_time = self.integrations[self.current_integration][0]
+        self.integration_time = self.integrations[self.current_integration][0]
         return limit
-
-    def validReading(self,ch0,ch1):
-        """
-        Check the TSL2591 reading for valid ranges
-        Visible (ch0-ch1) below 128 is too low
-        If either ch0 or ch1 reads 0xffff is too high
-        """
-        if ch0-ch1 < 128:
-            return False
-        if ch0 == 0xffff or ch1 == 0xffff:
-            return False
-        return True
 
     def readMPSAS(self):
         """
@@ -207,7 +223,7 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         if the MPSAS value is < 0 it is invalid
         """
         # Both channel levels range from 0-65535 (16-bit)
-        ch0, ch1 = super.raw_luminosity
+        ch0, ch1 = self.raw_luminosity
         # calculate magnitudes per square arcsecond
         visCumulative = ch0-ch1
         # adjust the gain depending on the sensor and re-measure
@@ -219,7 +235,7 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
                 if self.bump_integration(True):
                     # max gain/integration
                     goodReading = True
-            _ = super.raw_luminosity
+            _ = self.raw_luminosity
             #print("gain up")
         if ch0 == 0xffff or ch1 == 0xffff: #gain too high
             goodReading = False
@@ -228,14 +244,14 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
                 if self.bump_integration(False):
                     # min gain/integration
                     goodReading = True
-            _ = super.raw_luminosity
+            _ = self.raw_luminosity
             #print("gain down")
         # sample the sensor multiple times at low intensity
         if goodReading:
             ii = 1
             while visCumulative < 128:
                 time.sleep(.005)
-                ch0, ch1 = super.raw_luminosity
+                ch0, ch1 = self.raw_luminosity
                 visCumulative += (ch0-ch1)
                 ii+=1
                 if ii > 32: # only take in 32 measurements

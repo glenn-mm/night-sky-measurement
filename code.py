@@ -5,11 +5,8 @@
 # SPDX-License-Identifier: MIT
 
 # imports for basic functions
-import sys
 import time
 import board
-import watchdog
-import microcontroller
 import storage
 # import display functions
 import display
@@ -40,24 +37,13 @@ def runCalibration():
 
 # prepare for calibration w/ 3 second timeout
 if not tsl2591.calibrated:
-    print("Begin calibration (Y/N?)")
-    wdt = microcontroller.watchdog
-    wdt.timeout = 3
-    wdt.mode = watchdog.WatchDogMode.RAISE
-    choice = 'N'
-    try:
-        while True:
-            choice = sys.stdin.read(1)
-    except watchdog.WatchDogTimeout as _:
-        pass
-
-    if choice.lower() == 'y':
-        runCalibration()
+    print("Device uncalibrated, begin calibration...")
+    runCalibration()
 
 # begin main loop
 while True:
     # update the text of the label(s) to show the sensor readings
-    ch0, ch1, mpsas = tsl2591.getMPSAS()
+    ch0, ch1, mpsas = tsl2591.readMPSAS()
     ch0_s = f"Channel 0 (VS): {ch0}"
     display.set_light(ch0_s)
     #print(ch0_s)
