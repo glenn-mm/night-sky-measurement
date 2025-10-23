@@ -93,7 +93,7 @@ Calibration will require the use of an SQM-L device from https://www.unihedron.c
 
 ![Display + TSL2591 in case](images/display_sensor_mounted.jpg)
 
-![Display lined up](images/display_lined_up.jpb)
+![Display lined up](images/display_lined_up.jpg)
 
 * Mount proto board and adhere the antenna
 
