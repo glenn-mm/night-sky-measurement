@@ -1,6 +1,6 @@
 # controls the night-sky-measurement display
 
-#import and setup the display
+# import and setup the display
 import board
 from adafruit_display_text.bitmap_label import Label
 from terminalio import FONT
@@ -39,12 +39,14 @@ main_group.append(mpsas_output_label)
 display.root_group = main_group
 #### End of text labels for output ####
 
+
 def set_light(lstr):
     light_output_label.text = lstr
+
 
 def set_ir(irstr):
     infra_output_label.text = irstr
 
+
 def set_mpsas(mstr):
     mpsas_output_label.text = mstr
-
