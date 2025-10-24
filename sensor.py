@@ -95,20 +95,20 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
                 self.integration_time = self.integrations[integrationIdx][0]
                 # take a reading to flush the sensor
                 _ = self.raw_luminosity
-                time.sleep(0.01)
+                time.sleep(0.1)
                 visCumulative = 0
                 count = 0
                 for ii in range(32):
                     ch0, ch1 = self.raw_luminosity
                     if ch0 != 0xFFFF and ch1 != 0xFFFF:  # saturation
-                        visCumulative += ch0 - ch1
+                        visCumulative += (ch0 - ch1)
                         count += 1
                 vis = 0
                 if visCumulative > 0:
                     vis = visCumulative / 32
                 # store visble and sqm reading as a tuple
-                if vis > 128:
-                    self._calData[gainIdx][integrationIdx].append((vis, sqm_reading))
+                #if vis > 128:
+                self._calData[gainIdx][integrationIdx].append((vis, sqm_reading))
 
     def printCalibration(self):
         for gain in self._calData.keys():
@@ -173,7 +173,7 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         """
         if self.current_gain not in self._calData.keys():
             return -1
-        if self.current_intergration not in self._calData[self.current_gain].keys():
+        if self.current_integration not in self._calData[self.current_gain].keys():
             return -1
         readings = self._calData[self.current_gain][self.current_integration]
         # remove invalid readings
