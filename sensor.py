@@ -15,6 +15,8 @@ import os
 # Note: skipping 100ms integration time as it's not likely to be useful
 #  in night time conditions
 
+NUM_READINGS = 32
+MIN_READING_DIFF = 16
 
 class myTSL2591(adafruit_tsl2591.TSL2591):
     """
@@ -81,6 +83,23 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
                 print("Unable to read calibration data, sensor is uncalibrated!")
                 print(err)
 
+    def _reading(self):
+        # take a reading to flush the sensor
+        _ = self.raw_luminosity
+        #time.sleep(self.integration_time/1e3)
+        time.sleep(1)
+        visCumulative = 0
+        count = 0
+        for ii in range(NUM_READINGS):
+            ch0, ch1 = self.raw_luminosity
+            if ch0 != 0xFFFF and ch1 != 0xFFFF:  # saturation
+                visCumulative += (ch0 - ch1)
+                count += 1
+        vis = 0
+        if visCumulative > 0:
+            vis = visCumulative / count
+        return vis
+
     def _calibrationPass(self, sqm_reading):
         """
         Iterate the gain and integration ranges at the current light
@@ -93,20 +112,8 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
             self.gain = self.gains[gainIdx][0]
             for integrationIdx in self.integrations.keys():
                 self.integration_time = self.integrations[integrationIdx][0]
-                # take a reading to flush the sensor
-                _ = self.raw_luminosity
-                time.sleep(0.1)
-                visCumulative = 0
-                count = 0
-                for ii in range(32):
-                    ch0, ch1 = self.raw_luminosity
-                    if ch0 != 0xFFFF and ch1 != 0xFFFF:  # saturation
-                        visCumulative += (ch0 - ch1)
-                        count += 1
-                vis = 0
-                if visCumulative > 0:
-                    vis = visCumulative / 32
                 # store visble and sqm reading as a tuple
+                vis = self._reading()
                 #if vis > 128:
                 self._calData[gainIdx][integrationIdx].append((vis, sqm_reading))
 
@@ -171,25 +178,33 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         for the list of values to search for the closest value in visible light
         interpolate between closest point and neighbor and return mpsas reading
         """
-        if self.current_gain not in self._calData.keys():
-            return -1
-        if self.current_integration not in self._calData[self.current_gain].keys():
-            return -1
-        readings = self._calData[self.current_gain][self.current_integration]
+        #print(f"findMPSAS: g={self.current_gain} i={self.current_integration}")
+        s_g = str(self.current_gain)
+        s_i = str(self.current_integration)
+        if s_g not in self._calData.keys():
+            return 0,-1
+        if s_i not in self._calData[s_g].keys():
+            return 0,-1
+        readings = self._calData[s_g][s_i]
+        #print(readings)
         # remove invalid readings
         # readings = [r for r in readings if r[0] != None]
         # readings is a list of tuples (visible,mpsas)
         if vis < readings[0][0]:  # too low
-            return -1
+            return 0,-1
         if vis > readings[-1][0]:  # too high
-            return -1
-        return np.interp(
+            return 0,-1
+        # mpsas
+        # find closest visible
+        min_diff = np.min(abs(np.array([v[0] for v in readings])-vis))
+        if min_diff > MIN_READING_DIFF:
+            return 0,-1
+        mpsas_interp = np.interp(
             np.array([vis]),
             [v[0] for v in readings if v[0]],  # visible
             [m[1] for m in readings if m[0]],
-        )[
-            0
-        ]  # mpsas
+        )[0]
+        return min_diff,mpsas_interp
 
     def bump_gain(self, up):
         """
@@ -241,53 +256,26 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         return mpsas
 
     def readMPSAS(self):
-        """
-        Find the MPSAS value for the current sensor reading
-        This includes interpolating across the calibration data
-        once a quality ready from the TSL2591 is obtained
-        returns the two channels and an MPSAS value
-        if the MPSAS value is < 0 it is invalid
-        """
-        # Both channel levels range from 0-65535 (16-bit)
-        ch0, ch1 = self.raw_luminosity
-        # calculate magnitudes per square arcsecond
-        visCumulative = ch0 - ch1
-        # adjust the gain depending on the sensor and re-measure
-        goodReading = True
-        if visCumulative < 128:  # gain too low
-            goodReading = False
-            if self.bump_gain(True):
-                # print("max gain")
-                if self.bump_integration(True):
-                    # max gain/integration
-                    goodReading = True
-            _ = self.raw_luminosity
-            # print("gain up")
-        if ch0 == 0xFFFF or ch1 == 0xFFFF:  # gain too high
-            goodReading = False
-            if self.bump_gain(False):
-                # print("min gain")
-                if self.bump_integration(False):
-                    # min gain/integration
-                    goodReading = True
-            _ = self.raw_luminosity
-            # print("gain down")
-        # sample the sensor multiple times at low intensity
-        if goodReading:
-            ii = 1
-            while visCumulative < 128:
-                time.sleep(0.005)
-                ch0, ch1 = self.raw_luminosity
-                visCumulative += ch0 - ch1
-                ii += 1
-                if ii > 32:  # only take in 32 measurements
-                    break
-            # update mpsas when we have valid readings
-            if visCumulative != 0:
-                vis = visCumulative / ii
-                mpsas = self.findMPSAS(vis)
-                if mpsas > 0:
-                    return (ch0, ch1, mpsas, True)
-                else:  # return the uncalibrated formula
-                    return (ch0, ch1, self.calcMPSAS(visCumulative, ii), False)
-        return (ch0, ch1, -1, False)
+        mpsas = []
+        for gainIdx in self.gains.keys():
+            self.current_gain = gainIdx
+            self.gain = self.gains[gainIdx][0]
+            for integrationIdx in self.integrations.keys():
+                self.current_integration = integrationIdx
+                self.integration_time = self.integrations[integrationIdx][0]
+                vis = self._reading()
+                if vis > 0:
+                    print(self.gain, self.integration_time,vis)
+                    c_mpsas = self.findMPSAS(vis)
+                    if c_mpsas[1] > 0:
+                        #print(f"MPSAS = {mpsas}")
+                        mpsas.append(c_mpsas)
+        #print(mpsas, np.mean(mpsas))
+        print(mpsas)
+        if len(mpsas) > 0:
+            midx = np.argmin(np.array([v[0] for v in mpsas]))
+            print(mpsas[midx])
+            #return (0, 0, np.mean(mpsas), True)
+            return (0, 0, mpsas[midx][1], True)
+        else:
+            return (0, 0, 0, False)
