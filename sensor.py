@@ -178,7 +178,6 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         for the list of values to search for the closest value in visible light
         interpolate between closest point and neighbor and return mpsas reading
         """
-        #print(f"findMPSAS: g={self.current_gain} i={self.current_integration}")
         s_g = str(self.current_gain)
         s_i = str(self.current_integration)
         if s_g not in self._calData.keys():
@@ -186,9 +185,6 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         if s_i not in self._calData[s_g].keys():
             return 0,-1
         readings = self._calData[s_g][s_i]
-        #print(readings)
-        # remove invalid readings
-        # readings = [r for r in readings if r[0] != None]
         # readings is a list of tuples (visible,mpsas)
         if vis < readings[0][0]:  # too low
             return 0,-1
@@ -202,47 +198,9 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
         mpsas_interp = np.interp(
             np.array([vis]),
             [v[0] for v in readings if v[0]],  # visible
-            [m[1] for m in readings if m[0]],
+            [m[1] for m in readings if m[0]],  # mpsas
         )[0]
         return min_diff,mpsas_interp
-
-    def bump_gain(self, up):
-        """
-        Adjust the gain up or down by 1 unit
-        return whether we've hit a limit
-        """
-        limit = False
-        if up:
-            self.current_gain += 1
-            if self.current_gain > self.max_gain:  # already at max gain
-                limit = True
-                self.current_gain = self.max_gain
-        else:
-            self.current_gain -= 1
-            if self.current_gain < self.min_gain:  # already at min gain
-                limit = True
-                self.current_gain = self.min_gain
-        self.gain = self.gains[self.current_gain][0]
-        return limit
-
-    def bump_integration(self, up):
-        """
-        Adjust the integration duration up or down by 1 unit
-        return whether we've hit a limit
-        """
-        limit = False
-        if up:
-            self.current_integration += 1
-            if self.current_integration > self.max_integration:
-                limit = True
-                self.current_integration = self.max_integration
-        else:
-            self.current_integration -= 1
-            if self.current_integration < self.min_integration:
-                limit = True
-                self.current_integration = self.min_integration
-        self.integration_time = self.integrations[self.current_integration][0]
-        return limit
 
     def calcMPSAS(self, visCumulative, ii):
         """
@@ -257,6 +215,7 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
 
     def readMPSAS(self):
         mpsas = []
+        print(f"Gain,Integration,Visible,MPSAS(estimate)")
         for gainIdx in self.gains.keys():
             self.current_gain = gainIdx
             self.gain = self.gains[gainIdx][0]
@@ -265,17 +224,16 @@ class myTSL2591(adafruit_tsl2591.TSL2591):
                 self.integration_time = self.integrations[integrationIdx][0]
                 vis = self._reading()
                 if vis > 0:
-                    print(self.gain, self.integration_time,vis)
                     c_mpsas = self.findMPSAS(vis)
                     if c_mpsas[1] > 0:
-                        #print(f"MPSAS = {mpsas}")
+                        print(f"{self.gain},{self.integration_time},{vis},{c_mpsas}")
                         mpsas.append(c_mpsas)
-        #print(mpsas, np.mean(mpsas))
-        print(mpsas)
         if len(mpsas) > 0:
-            midx = np.argmin(np.array([v[0] for v in mpsas]))
-            print(mpsas[midx])
-            #return (0, 0, np.mean(mpsas), True)
-            return (0, 0, mpsas[midx][1], True)
+            # alternative mpsas is return min
+            #midx = np.argmin(np.array([v[0] for v in mpsas]))
+            #print(mpsas[midx])
+            m_mpsas = np.mean([x[1] for x in mpsas])
+            print(f"Mean MPSAS = {m_mpsas}")
+            return (m_mpsas, True)
         else:
-            return (0, 0, 0, False)
+            return (0, False)

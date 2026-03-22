@@ -47,22 +47,15 @@ if not tsl2591.calibrated:
 # begin main loop
 while True:
     # update the text of the label(s) to show the sensor readings
-    display.set_light("Taking reading, hold still")
-    #display.set_ir("")
-    #display.set_mpsas("")
-    ch0, ch1, mpsas, cal = tsl2591.readMPSAS()
-    ch0_s = f"Channel 0 (VS): {ch0}"
-    display.set_light(ch0_s)
-    # print(ch0_s)
-    ch1_s = f"Channel 1 (IR): {ch1}"
-    display.set_ir(ch1_s)
-    # print(ch1_s)
+    display.set_line1("Taking reading")
+    display.set_line2("Hold still")
+    mpsas, cal = tsl2591.readMPSAS()
     if mpsas > 0:
         mpsas_s = f"MPSAS:{mpsas:.1f}"
-        if not cal:
-            mpsas_s += "*"
-        # print(mpsas_s)
-        display.set_mpsas(mpsas_s)
+        display.set_line3(mpsas_s)
     else:
         display.set_mpsas("MPSAS: Out of Range")
+    display.set_line1("Sleeping 2s")
+    time.sleep(1)
+    display.set_line2("Sleeping 1s")
     time.sleep(1)
