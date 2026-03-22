@@ -71,9 +71,11 @@ Calibration will require the use of an SQM-L device from https://www.unihedron.c
   * Look for console output with the Total, Infrared, Visible and Full spectrum measurements
   * Occlude the TSL2591 sensor and ensure values drop in magnitude
 
-### Install code
-* Download this project's python code into the CIRCUITPY drive
-* One can run the code, skip calibration and see uncalibrated sensor readings on display to verify
+### Install/Update code
+* Download this project's python code and calibration file into the CIRCUITPY drive
+  * Download code.py, display.py, sensory.py and tsl2591_calibration.json into your CIRCUITPY drive
+  * CIRCUITPY drive will be in Drives under Windows and /media/$USER/CIRCUITPY under Ubuntu
+* (Advanced) See bottom of page for doing your own calibration
 
 ### Package the project
 * 3D print the [upper](case/case_upper.stl) and [lower](case/case.stl) cases
@@ -114,8 +116,16 @@ Calibration will require the use of an SQM-L device from https://www.unihedron.c
 
 ![Working display and sensor](images/working_display.jpg)
 
+### Calibration (Advanced)
+
+Note: this requires you have access to a controlled light source and dark room/tunnel as well as an SQM-L device
+
 * Run calibration steps
+  * Remove tsl2591_calibration.json from CIRCUITPY directory
   * Start up Thonny
   * Plug in USB
   * Hit Y to begin calibration
+    * Unmount CIRCUITPY drive
   * Follow prompts for readings with SQM-L
+    * Setup light intensity, take an SQM-L reading, device calibrates
+    * Rinse and repeat until done (great light range is better)
