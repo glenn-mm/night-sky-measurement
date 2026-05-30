@@ -54,7 +54,7 @@ while True:
         mpsas_s = f"MPSAS:{mpsas:.1f}"
         display.set_line3(mpsas_s)
     else:
-        display.set_mpsas("MPSAS: Out of Range")
+        display.set_line3("MPSAS: Out of Range")
     display.set_line1("Sleeping 2s")
     time.sleep(1)
     display.set_line2("Sleeping 1s")
